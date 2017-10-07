@@ -1,15 +1,15 @@
 package main
 
 import (
-	"sphere2cube/cache"
-	"log"
-	"os"
-	"io"
-	"image/jpeg"
-	"math"
-	"time"
 	"image"
 	"image/color"
+	"image/jpeg"
+	"io"
+	"log"
+	"math"
+	"os"
+	"sphere2cube/cache"
+	"time"
 )
 
 const (
@@ -35,6 +35,10 @@ type Pixel struct {
 	A int
 }
 
+func (pixel *Pixel) pixelToRGBA() color.Color {
+	return color.RGBA64{uint16(pixel.R * 257), uint16(pixel.G * 257), uint16(pixel.B * 257), uint16(pixel.A * 257)}
+}
+
 func getHalfSize() float64 {
 	return float64(tileSize-1) / 2
 }
@@ -42,10 +46,6 @@ func getHalfSize() float64 {
 // img.At(x, y).RGBA() returns four uint32 values; we want a Pixel
 func rgbaToPixel(r uint32, g uint32, b uint32, a uint32) Pixel {
 	return Pixel{int(r / 257), int(g / 257), int(b / 257), int(a / 257)}
-}
-
-func (pixel *Pixel) pixelToRGBA() color.Color {
-	return color.RGBA64{uint16(pixel.R * 257), uint16(pixel.G * 257), uint16(pixel.B * 257), uint16(pixel.A * 257)}
 }
 
 // Get the bi-dimensional pixel array
@@ -169,7 +169,7 @@ func worker(tileName string, mathCache cache.CacheAngles, tileSize int, original
 		for tileX := 0; tileX < tileSize; tileX++ {
 			pixelToMove := processCords(tileX, tileY, originalPixels, tileName, mathCache)
 			colorPixel := pixelToMove.pixelToRGBA()
-			tile.Set(tileX, tileY, colorPixel)
+			tile.Set(tileY, tileX, colorPixel)
 		}
 	}
 
