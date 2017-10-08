@@ -26,8 +26,12 @@ func SaveTile(tileResult worker.TileResult, outPutDir string) error {
 	}
 
 	defer f.Close()
-	jpeg.Encode(f, tileResult.Image, &jpeg.Options{100})
+
+	err = jpeg.Encode(f, tileResult.Image, &jpeg.Options{100})
+
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
-
