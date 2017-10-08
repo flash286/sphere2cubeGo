@@ -8,7 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
-	"sphere2cube/cache"
+	"sphere2cubeGo/cache"
 	"time"
 )
 
