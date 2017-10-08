@@ -144,7 +144,7 @@ func processCords(tileX int, tileY int, originalImage [][]Pixel, tile Tile, math
 }
 
 func Worker(tile Tile, mathCache cache.CacheAngles, originalImagePath string, done chan TileResult) {
-	log.Printf("Process for tileImage %v --> started", tile.TileName)
+	log.Printf("Process for tile %v --> started", tile.TileName)
 	tileImage := image.NewRGBA(image.Rect(0, 0, tile.TileSize, tile.TileSize))
 	reader, err := os.Open(originalImagePath)
 
