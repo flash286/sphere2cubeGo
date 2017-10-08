@@ -21,14 +21,14 @@ var (
 	}
 	tileSize          = 1024
 	originalImagePath = ""
-	outPutDir         = "result"
+	outPutDir         = "./build"
 )
 
 func main() {
 
-	tileSizeCmd := flag.Int("tile_size", tileSize, "Size in px of final tile")
-	originalImagePathCmd := flag.String("input_path", "", "")
-	outPutDirCmd := flag.String("output_path", outPutDir, "")
+	tileSizeCmd := flag.Int("s", tileSize, "Size in px of final tile")
+	originalImagePathCmd := flag.String("i", "", "Path to input equirectangular panorama")
+	outPutDirCmd := flag.String("o", outPutDir, "Path to output directory")
 
 	flag.Parse()
 
@@ -37,8 +37,8 @@ func main() {
 	outPutDir = *outPutDirCmd
 
 	if originalImagePath == "" {
-		log.Fatal("input_path is required")
-		os.Exit(1)
+		flag.PrintDefaults()
+		os.Exit(2)
 	}
 
 	_, err := os.Stat(originalImagePath)
