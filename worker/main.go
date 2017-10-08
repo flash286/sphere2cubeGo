@@ -30,7 +30,7 @@ type Tile struct {
 	TileName string
 }
 
-func (tile *Tile) getHalf() float64 {
+func (tile *Tile) getHalfSize() float64 {
 	return float64(tile.TileSize-1) / 2
 }
 
@@ -115,26 +115,26 @@ func processCords(tileX int, tileY int, originalImage [][]Pixel, tile Tile, math
 	if tile.TileName == TileUp {
 		theta = mathCache.ZP[tileY][tileX]
 		phi = mathCache.PHI[tileX][tileY]
-		phi = updatePhi(tile.getHalf(), phi, tileY, tileX, math.Pi, 0, -math.Pi/2, math.Pi/2)
+		phi = updatePhi(tile.getHalfSize(), phi, tileY, tileX, math.Pi, 0, -math.Pi/2, math.Pi/2)
 	} else if tile.TileName == TileDown {
 		theta = mathCache.ZM[tileY][tileX]
 		phi = mathCache.PHI[tileX][tile.TileSize-tileY-1]
-		phi = updatePhi(tile.getHalf(), phi, tileY, tileX, 0, math.Pi, -math.Pi/2, math.Pi/2)
+		phi = updatePhi(tile.getHalfSize(), phi, tileY, tileX, 0, math.Pi, -math.Pi/2, math.Pi/2)
 	} else if tile.TileName == TileFront {
 		theta = mathCache.XYPM[tile.TileSize-tileY-1][tile.TileSize-tileX-1]
 		phi = mathCache.PHI[tileX][tile.TileSize-1] //tile_x, tile_size - 1
-		phi = updatePhi(tile.getHalf(), phi, tileY, tileX, 0, 0, -math.Pi/2, math.Pi/2)
+		phi = updatePhi(tile.getHalfSize(), phi, tileY, tileX, 0, 0, -math.Pi/2, math.Pi/2)
 	} else if tile.TileName == TileRight {
 		theta = mathCache.XYPM[tile.TileSize-tileY-1][tile.TileSize-tileX-1]
 		phi = mathCache.PHI[tile.TileSize-1][tile.TileSize-tileX-1]
-		phi = updatePhi(tile.getHalf(), phi, tileX, tileY, 0, math.Pi, math.Pi/2, math.Pi/2)
+		phi = updatePhi(tile.getHalfSize(), phi, tileX, tileY, 0, math.Pi, math.Pi/2, math.Pi/2)
 	} else if tile.TileName == TileBack {
 		theta = mathCache.XYPM[tile.TileSize-tileY-1][tile.TileSize-tileX-1]
 		phi = mathCache.PHI[tileX][tile.TileSize-1] + math.Pi
 	} else if tile.TileName == TileLeft {
 		theta = mathCache.XYPM[tile.TileSize-tileY-1][tile.TileSize-tileX-1]
 		phi = mathCache.PHI[tile.TileSize-1][tile.TileSize-tileX-1]
-		phi = updatePhi(tile.getHalf(), phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
+		phi = updatePhi(tile.getHalfSize(), phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
 	}
 
 	spX := phi2Width(sphereWidth, phi)
