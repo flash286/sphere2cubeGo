@@ -160,6 +160,13 @@ func Worker(tile Tile, mathCache cache.CacheAngles, originalImagePath string, do
 		panic(err)
 	}
 
+	sphereHeight, sphereWidth := len(originalPixels), len(originalPixels[0])
+
+	if sphereWidth/sphereHeight != 2 {
+		log.Fatal("Panorama should has 2:1 aspect ratio")
+		os.Exit(2)
+	}
+
 	for tileY := 0; tileY < tile.TileSize; tileY++ {
 		for tileX := 0; tileX < tile.TileSize; tileX++ {
 			pixelToMove := processCords(tileX, tileY, originalPixels, tile, mathCache)
