@@ -22,8 +22,8 @@ const (
 )
 
 var (
-	tileNames         = []string{TileUp, TileDown, TileFront, TileRight, TileBack, TileLeft}
-	tileSize          = 512
+	tileNames         = []string{TileLeft, TileDown, TileFront, TileRight, TileBack, TileUp}
+	tileSize          = 1024
 	originalImagePath = "/panorama.jpg"
 )
 
@@ -40,7 +40,8 @@ func (pixel *Pixel) pixelToRGBA() color.Color {
 }
 
 func getHalfSize() float64 {
-	return float64(tileSize-1) / 2
+	result := float64(tileSize-1) / 2
+	return result
 }
 
 // img.At(x, y).RGBA() returns four uint32 values; we want a Pixel
@@ -86,7 +87,7 @@ func updatePhi(half_size float64, phi float64, major_dir int, minor_dir int, maj
 	return phi
 }
 
-func phi2Width(width int, phi float64) uint8 {
+func phi2Width(width int, phi float64) int {
 	x := 0.5 * float64(width) * (phi/math.Pi + 1)
 
 	if x < 1 {
@@ -95,11 +96,11 @@ func phi2Width(width int, phi float64) uint8 {
 		x -= float64(width)
 	}
 
-	return uint8(x)
+	return int(x)
 }
 
-func theta2Height(height int, theta float64) uint8 {
-	return uint8(float64(height) * theta / math.Pi)
+func theta2Height(height int, theta float64) int {
+	return int(float64(height) * theta / math.Pi)
 }
 
 func processCords(tileX int, tileY int, originalImage [][]Pixel, tileName string, mathCache cache.CacheAngles) Pixel {
@@ -134,7 +135,8 @@ func processCords(tileX int, tileY int, originalImage [][]Pixel, tileName string
 		phi = updatePhi(getHalfSize(), phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
 	}
 
-	spX, spY := phi2Width(sphereWidth, phi), theta2Height(sphereHeight, theta)
+	spX := phi2Width(sphereWidth, phi)
+	spY := theta2Height(sphereHeight, theta)
 
 	//log.Printf("[%v]Theta: %v", tileName, theta)
 	//log.Printf("[%v]phi: %v", tileName, phi)
@@ -169,7 +171,7 @@ func worker(tileName string, mathCache cache.CacheAngles, tileSize int, original
 		for tileX := 0; tileX < tileSize; tileX++ {
 			pixelToMove := processCords(tileX, tileY, originalPixels, tileName, mathCache)
 			colorPixel := pixelToMove.pixelToRGBA()
-			tile.Set(tileY, tileX, colorPixel)
+			tile.Set(tileX, tileY, colorPixel)
 		}
 	}
 
@@ -194,12 +196,11 @@ func main() {
 	cacheResult := cache.CacheAnglesHandler(tileSize)
 	for _, tileName := range tileNames {
 		go worker(tileName, cacheResult, tileSize, originalImagePath, done)
-		value := <-done
-		log.Printf("Process for tile %v --> finished", value)
 	}
 
 	for range tileNames {
-
+		value := <-done
+		log.Printf("Process for tile %v --> finished", value)
 	}
 
 	timeFinish := time.Now()

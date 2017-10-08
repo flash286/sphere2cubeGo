@@ -1,6 +1,8 @@
 package cache
 
-import "math"
+import (
+	"math"
+)
 
 type CacheAngles struct {
 	ZP   [][]float64
@@ -11,7 +13,7 @@ type CacheAngles struct {
 
 func CacheAnglesHandler(tileSize int) CacheAngles {
 	var cache CacheAngles
-	half_size := float64(tileSize-1) / 2
+	halfSize := float64(tileSize-1) / 2
 
 	cache.ZP = make([][]float64, tileSize)
 	cache.ZM = make([][]float64, tileSize)
@@ -19,7 +21,7 @@ func CacheAnglesHandler(tileSize int) CacheAngles {
 	cache.PHI = make([][]float64, tileSize)
 
 	for tileY := 0; tileY < tileSize; tileY++ {
-		y := float64(tileY)/half_size - 1
+		y := float64(tileY)/halfSize - 1
 
 		cache.ZP[tileY] = make([]float64, tileSize)
 		cache.ZM[tileY] = make([]float64, tileSize)
@@ -27,8 +29,8 @@ func CacheAnglesHandler(tileSize int) CacheAngles {
 		cache.PHI[tileY] = make([]float64, tileSize)
 
 		for tileX := 0; tileX < tileSize; tileX++ {
-			x := float64(tileX)/half_size - 1
-			root := math.Sqrt(x*x + y*y + 1)
+			x := float64(tileX)/halfSize - 1
+			root := math.Sqrt(math.Pow(x, 2) + math.Pow(y, 2) + 1)
 			cache.ZP[tileY][tileX] = math.Acos(1 / root)
 			cache.ZM[tileY][tileX] = math.Acos(-1 / root)
 			cache.XYPM[tileY][tileX] = math.Acos(y / root)
