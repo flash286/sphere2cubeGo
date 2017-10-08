@@ -2,6 +2,10 @@
 
 Console script written on Go that convert an equirectangular/latlong map into an array of cubemap faces (like you would use to send to OpenGL)
 
+### How Does it Work
+
+![Alt text](pic-to-explain.png?raw=true)
+
 ### How to Use:
 
 ```bash
