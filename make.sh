@@ -4,6 +4,6 @@ for GOOS in darwin linux windows; do
     echo "Building $GOOS-$GOARCH"
     export GOOS=$GOOS
     export GOARCH=$GOARCH
-    go build -o bin/spehe2cubeGo-$GOOS-$GOARCH
+    go build -o bin/sphere2cubeGo-$GOOS-$GOARCH
   done
 done
