@@ -1,13 +1,13 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 	"sphere2cubeGo/cache"
-	"time"
-	"flag"
-	"sphere2cubeGo/worker"
 	"sphere2cubeGo/saver"
+	"sphere2cubeGo/worker"
+	"time"
 )
 
 var (
