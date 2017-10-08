@@ -61,7 +61,8 @@ func main() {
 		err = saver.SaveTile(tileResult, outPutDir)
 
 		if err != nil {
-			panic(err)
+			log.Fatal(err.Error())
+			os.Exit(2)
 		}
 
 		log.Printf("Process for tile %v --> finished", tileResult.Tile.TileName)

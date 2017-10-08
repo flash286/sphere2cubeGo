@@ -13,7 +13,7 @@ func SaveTile(tileResult worker.TileResult, outPutDir string) error {
 
 	if err != nil {
 		if !os.IsExist(err) {
-			panic(err)
+			return err
 		}
 	}
 
