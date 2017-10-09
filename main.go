@@ -19,19 +19,19 @@ var (
 		worker.TileBack,
 		worker.TileLeft,
 	}
+
 	tileSize          = 1024
 	originalImagePath = ""
 	outPutDir         = "./build"
+
+	tileSizeCmd          = flag.Int("s", tileSize, "Size in px of final tile")
+	originalImagePathCmd = flag.String("i", "", "Path to input equirectangular panorama")
+	outPutDirCmd         = flag.String("o", outPutDir, "Path to output directory")
 )
 
 func main() {
 
-	tileSizeCmd := flag.Int("s", tileSize, "Size in px of final tile")
-	originalImagePathCmd := flag.String("i", "", "Path to input equirectangular panorama")
-	outPutDirCmd := flag.String("o", outPutDir, "Path to output directory")
-
 	flag.Parse()
-
 	tileSize = *tileSizeCmd
 	originalImagePath = *originalImagePathCmd
 	outPutDir = *outPutDirCmd
