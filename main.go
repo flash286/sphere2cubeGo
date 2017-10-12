@@ -45,6 +45,7 @@ func main() {
 	if err != nil {
 		if os.IsNotExist(err) {
 			log.Fatalf("%v not found", originalImagePath)
+			os.Exit(2)
 		}
 	}
 
