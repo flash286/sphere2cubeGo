@@ -1,14 +1,14 @@
 package worker
 
 import (
-	"sphere2cubeGo/cache"
-	"log"
 	"image"
-	"os"
-	"image/jpeg"
 	"image/color"
+	"image/jpeg"
 	"io"
+	"log"
 	"math"
+	"os"
+	"sphere2cubeGo/cache"
 )
 
 const (
@@ -52,7 +52,7 @@ func rgbaToPixel(r uint32, g uint32, b uint32, a uint32) Pixel {
 }
 
 // Get the bi-dimensional pixel array
-func getPixels(file io.Reader) ([][]Pixel, error) {
+func GetPixels(file io.Reader) ([][]Pixel, error) {
 	img, err := jpeg.Decode(file)
 
 	if err != nil {
@@ -143,22 +143,9 @@ func processCords(tileX int, tileY int, originalImage [][]Pixel, tile Tile, math
 	return originalImage[spY][spX]
 }
 
-func Worker(tile Tile, mathCache cache.CacheAngles, originalImagePath string, done chan TileResult) {
+func Worker(originalPixels [][]Pixel, tile Tile, mathCache cache.CacheAngles, originalImagePath string, done chan TileResult) {
 	log.Printf("Process for tile %v --> started", tile.TileName)
 	tileImage := image.NewRGBA(image.Rect(0, 0, tile.TileSize, tile.TileSize))
-	reader, err := os.Open(originalImagePath)
-
-	if err != nil {
-		panic(err)
-	}
-
-	defer reader.Close()
-
-	originalPixels, err := getPixels(reader)
-
-	if err != nil {
-		panic(err)
-	}
 
 	sphereHeight, sphereWidth := len(originalPixels), len(originalPixels[0])
 
