@@ -52,9 +52,25 @@ func main() {
 	done := make(chan worker.TileResult)
 	timeStart := time.Now()
 	cacheResult := cache.CacheAnglesHandler(tileSize)
+
+	log.Printf("Read file %v --> started", originalImagePath)
+
+	reader, err := os.Open(originalImagePath)
+	if err != nil {
+		panic(err)
+	}
+	defer reader.Close()
+
+	log.Printf("Read file %v --> finished", originalImagePath)
+
+	originalPixels, err := worker.GetPixels(reader)
+	if err != nil {
+		panic(err)
+	}
+
 	for _, tileName := range tileNames {
 		tile := worker.Tile{TileName: tileName, TileSize: tileSize}
-		go worker.Worker(tile, cacheResult, originalImagePath, done)
+		go worker.Worker(originalPixels, tile, cacheResult, originalImagePath, done)
 	}
 
 	for range tileNames {
