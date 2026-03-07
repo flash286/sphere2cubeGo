@@ -88,11 +88,11 @@ func TestValidateAspectRatio_Empty(t *testing.T) {
 func TestRenderTile_OutputDimensions(t *testing.T) {
 	pano := makeTestPanorama(4, 2)
 	tileSize := 2
-	ac := cache.Precompute(tileSize)
+	pm := cache.Precompute(tileSize, pano.Width, pano.Height)
 
 	for _, face := range AllFaces() {
 		tile := Tile{Size: tileSize, Name: face}
-		result := RenderTile(pano, tile, &ac)
+		result := RenderTile(pano, tile, &pm)
 
 		bounds := result.Image.Bounds()
 		if bounds.Dx() != tileSize || bounds.Dy() != tileSize {

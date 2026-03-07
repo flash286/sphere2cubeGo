@@ -47,8 +47,8 @@ func run() error {
 		return err
 	}
 
-	log.Printf("Pre-computing angle cache for tile size %d", *tileSize)
-	angleCache := cache.Precompute(*tileSize)
+	log.Printf("Pre-computing pixel map for tile size %d", *tileSize)
+	pixelMap := cache.Precompute(*tileSize, pano.Width, pano.Height)
 
 	faces := worker.AllFaces()
 	results := make([]worker.TileResult, len(faces))
@@ -60,7 +60,7 @@ func run() error {
 			defer wg.Done()
 			tile := worker.Tile{Size: *tileSize, Name: faceName}
 			log.Printf("Rendering tile %s", faceName)
-			results[idx] = worker.RenderTile(pano, tile, &angleCache)
+			results[idx] = worker.RenderTile(pano, tile, &pixelMap)
 			log.Printf("Tile %s done", faceName)
 		}(i, name)
 	}

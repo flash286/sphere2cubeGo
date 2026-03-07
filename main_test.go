@@ -63,7 +63,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("ValidateAspectRatio: %v", err)
 	}
 
-	ac := cache.Precompute(tileSize)
+	ac := cache.Precompute(tileSize, pano.Width, pano.Height)
 	faces := worker.AllFaces()
 
 	for _, name := range faces {
@@ -129,7 +129,7 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ac := cache.Precompute(tileSize)
+	ac := cache.Precompute(tileSize, pano.Width, pano.Height)
 
 	for _, name := range worker.AllFaces() {
 		tile := worker.Tile{Size: tileSize, Name: name}
@@ -165,12 +165,16 @@ func createGradientPanorama(width, height int) *worker.Panorama {
 	return worker.NewPanorama(width, height, pix)
 }
 
-// BenchmarkPrecompute measures angle cache generation time.
+// BenchmarkPrecompute measures pixel map generation time.
 func BenchmarkPrecompute(b *testing.B) {
-	for _, tileSize := range []int{256, 512, 1024} {
-		b.Run(sizeLabel(tileSize), func(b *testing.B) {
+	for _, tc := range []struct{ panoW, panoH, tile int }{
+		{2048, 1024, 256},
+		{4096, 2048, 512},
+		{4096, 2048, 1024},
+	} {
+		b.Run(sizeLabel(tc.tile), func(b *testing.B) {
 			for range b.N {
-				cache.Precompute(tileSize)
+				cache.Precompute(tc.tile, tc.panoW, tc.panoH)
 			}
 		})
 	}
@@ -183,12 +187,12 @@ func BenchmarkRenderTile(b *testing.B) {
 		{4096, 2048, 1024},
 	} {
 		pano := createGradientPanorama(tc.panoW, tc.panoH)
-		ac := cache.Precompute(tc.tile)
+		pm := cache.Precompute(tc.tile, tc.panoW, tc.panoH)
 		tile := worker.Tile{Size: tc.tile, Name: worker.FaceFront}
 
 		b.Run(sizeLabel(tc.tile)+"_pano"+sizeLabel(tc.panoW), func(b *testing.B) {
 			for range b.N {
-				worker.RenderTile(pano, tile, &ac)
+				worker.RenderTile(pano, tile, &pm)
 			}
 		})
 	}
@@ -207,7 +211,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 		b.Run(label, func(b *testing.B) {
 			for range b.N {
 				outputDir := b.TempDir()
-				ac := cache.Precompute(tc.tile)
+				pm := cache.Precompute(tc.tile, tc.panoW, tc.panoH)
 				faces := worker.AllFaces()
 				results := make([]worker.TileResult, len(faces))
 
@@ -217,7 +221,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 					go func(idx int, faceName string) {
 						defer wg.Done()
 						t := worker.Tile{Size: tc.tile, Name: faceName}
-						results[idx] = worker.RenderTile(pano, t, &ac)
+						results[idx] = worker.RenderTile(pano, t, &pm)
 					}(i, name)
 				}
 				wg.Wait()
