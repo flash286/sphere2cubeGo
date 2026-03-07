@@ -33,7 +33,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("open input file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	start := time.Now()
 

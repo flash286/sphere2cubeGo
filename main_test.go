@@ -34,7 +34,7 @@ func createTestPanorama(t *testing.T, width, height int) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := jpeg.Encode(f, img, &jpeg.Options{Quality: 95}); err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pano, err := worker.DecodeImage(f)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		img, err := jpeg.Decode(out)
-		out.Close()
+		_ = out.Close()
 		if err != nil {
 			t.Errorf("face %s: invalid JPEG: %v", name, err)
 			continue
@@ -122,7 +122,7 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pano, err := worker.DecodeImage(f)
 	if err != nil {

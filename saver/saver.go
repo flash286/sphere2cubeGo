@@ -20,11 +20,11 @@ func SaveTile(result worker.TileResult, outputDir string, quality int) error {
 	if err != nil {
 		return fmt.Errorf("create file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := jpeg.Encode(f, result.Image, &jpeg.Options{Quality: quality}); err != nil {
 		return fmt.Errorf("encode JPEG: %w", err)
 	}
 
-	return nil
+	return f.Close()
 }
