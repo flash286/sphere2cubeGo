@@ -6,6 +6,7 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"sphere2cubeGo/cache"
@@ -152,4 +153,111 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 	if len(entries) != 6 {
 		t.Errorf("expected 6 files, got %d", len(entries))
 	}
+}
+
+// createGradientPixels builds an in-memory 2:1 panorama pixel array directly,
+// bypassing JPEG encode/decode to keep benchmark setup overhead minimal.
+func createGradientPixels(width, height int) [][]worker.Pixel {
+	pixels := make([][]worker.Pixel, height)
+	for y := range height {
+		row := make([]worker.Pixel, width)
+		for x := range width {
+			row[x] = worker.Pixel{
+				R: 255 * x / width,
+				G: 255 * y / height,
+				B: 128,
+				A: 255,
+			}
+		}
+		pixels[y] = row
+	}
+	return pixels
+}
+
+// BenchmarkPrecompute measures angle cache generation time.
+func BenchmarkPrecompute(b *testing.B) {
+	for _, tileSize := range []int{256, 512, 1024} {
+		b.Run(sizeLabel(tileSize), func(b *testing.B) {
+			for range b.N {
+				cache.Precompute(tileSize)
+			}
+		})
+	}
+}
+
+// BenchmarkRenderTile measures single-tile rendering (front face).
+func BenchmarkRenderTile(b *testing.B) {
+	for _, tc := range []struct{ panoW, panoH, tile int }{
+		{2048, 1024, 512},
+		{4096, 2048, 1024},
+	} {
+		pixels := createGradientPixels(tc.panoW, tc.panoH)
+		ac := cache.Precompute(tc.tile)
+		tile := worker.Tile{Size: tc.tile, Name: worker.FaceFront}
+
+		b.Run(sizeLabel(tc.tile)+"_pano"+sizeLabel(tc.panoW), func(b *testing.B) {
+			for range b.N {
+				worker.RenderTile(pixels, tile, ac)
+			}
+		})
+	}
+}
+
+// BenchmarkFullPipeline measures the full pipeline: cache + render all 6 faces + save.
+func BenchmarkFullPipeline(b *testing.B) {
+	for _, tc := range []struct{ panoW, panoH, tile int }{
+		{2048, 1024, 256},
+		{4096, 2048, 512},
+		{4096, 2048, 1024},
+	} {
+		pixels := createGradientPixels(tc.panoW, tc.panoH)
+
+		label := "pano" + sizeLabel(tc.panoW) + "_tile" + sizeLabel(tc.tile)
+		b.Run(label, func(b *testing.B) {
+			for range b.N {
+				outputDir := b.TempDir()
+				ac := cache.Precompute(tc.tile)
+				faces := worker.AllFaces()
+				results := make([]worker.TileResult, len(faces))
+
+				var wg sync.WaitGroup
+				for i, name := range faces {
+					wg.Add(1)
+					go func(idx int, faceName string) {
+						defer wg.Done()
+						t := worker.Tile{Size: tc.tile, Name: faceName}
+						results[idx] = worker.RenderTile(pixels, t, ac)
+					}(i, name)
+				}
+				wg.Wait()
+
+				for _, r := range results {
+					if err := saver.SaveTile(r, outputDir, 90); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+		})
+	}
+}
+
+func sizeLabel(n int) string {
+	if n >= 1024 && n%1024 == 0 {
+		return itoa(n/1024) + "k"
+	}
+	return itoa(n)
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	buf := [20]byte{}
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
 }
