@@ -88,17 +88,67 @@ Custom output directory and JPEG quality:
 
 1. **Decode** the equirectangular panorama into a flat pixel buffer
 2. **Pre-compute** trigonometric lookup tables (acos, atan) for the given tile size
-3. **Map** each pixel of each cube face back to spherical coordinates (theta, phi), then to the source panorama pixel
+3. **Map** each pixel of each cube face back to spherical coordinates, then to the source panorama pixel
 4. **Write** the six output JPEG files
 
-The math maps 3D cube-face coordinates → spherical (theta, phi) → 2D equirectangular (x, y):
+### The math
+
+The core problem: for each pixel on a cube face, find which pixel in the source panorama it corresponds to. This is a two-step coordinate transformation.
+
+#### Step 1 — Cube face pixel to spherical coordinates
+
+Each cube face pixel `(tx, ty)` is normalized to the `[-1, 1]` range:
 
 ```
-cube pixel (tx, ty) → normalize to [-1, 1]
-                     → compute theta = acos(z/r), phi = atan(y/x)
-                     → x_pano = width * (phi/pi + 1) / 2
-                     → y_pano = height * theta / pi
+x = tx / halfSize - 1
+y = ty / halfSize - 1
 ```
+
+These represent 3D direction vectors from the cube center through the face. The specific mapping depends on which face we're rendering — for example, the **front** face has an implicit `z = 1`, the **right** face has `x = 1`, etc.
+
+From the direction vector we compute the distance to the origin and the two spherical angles:
+
+```
+r = sqrt(x² + y² + 1)
+
+theta (polar angle, 0 at top pole to π at bottom):
+  - Up face:   theta = acos(1 / r)     — looking up, z = +1
+  - Down face: theta = acos(-1 / r)    — looking down, z = -1
+  - Side faces: theta = acos(y / r)    — y maps to vertical
+
+phi (azimuth, -π to π around the equator):
+  - Base:  phi = atan(y / x)
+  - Adjusted per face by adding offsets (0, ±π/2, π)
+    to rotate into the correct quadrant
+```
+
+The `atan + offset` logic (see `updatePhi` in code) resolves the quadrant ambiguity that `atan` alone cannot handle — it checks whether the pixel is above/below or left/right of the face center and applies the correct correction.
+
+#### Step 2 — Spherical coordinates to panorama pixel
+
+The equirectangular projection maps longitude linearly to x and latitude linearly to y:
+
+```
+x_pano = width × (phi / π + 1) / 2
+y_pano = height × theta / π
+```
+
+This is the [equirectangular projection](https://en.wikipedia.org/wiki/Equirectangular_projection) inverse — `phi ∈ [-π, π]` maps to `[0, width]` and `theta ∈ [0, π]` maps to `[0, height]`.
+
+Values that fall outside `[1, width]` are wrapped around (the panorama repeats horizontally).
+
+#### Pre-computed cache
+
+Since `r`, `theta`, and `phi` only depend on the tile pixel position (not on the panorama content), all trig values are computed once in `cache.Precompute()` and stored in flat lookup tables:
+
+| Table | Formula | Used by |
+|-------|---------|---------|
+| `ZenithPos` | `acos(1/r)` | Up face |
+| `ZenithNeg` | `acos(-1/r)` | Down face |
+| `Polar` | `acos(y/r)` | Front, Right, Back, Left |
+| `Azimuth` | `atan(y/x)` | All faces |
+
+This trades ~32MB of memory (for 1024px tiles) for eliminating 4 trig calls per pixel × 6M pixels = 24M trig operations.
 
 ## Project structure
 
