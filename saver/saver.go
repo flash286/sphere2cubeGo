@@ -1,37 +1,30 @@
 package saver
 
 import (
-	"os"
+	"fmt"
 	"image/jpeg"
+	"os"
 	"path/filepath"
+
 	"sphere2cubeGo/worker"
 )
 
-func SaveTile(tileResult worker.TileResult, outPutDir string) error {
-
-	err := os.Mkdir(outPutDir, os.FileMode(os.ModePerm))
-
-	if err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
+// SaveTile writes a tile result to a JPEG file in the given directory.
+func SaveTile(result worker.TileResult, outputDir string, quality int) error {
+	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+		return fmt.Errorf("create output directory: %w", err)
 	}
 
-	finalPath := filepath.Join(outPutDir, tileResult.Tile.TileName+".jpg")
-
-	f, err := os.Create(finalPath)
-
+	path := filepath.Join(outputDir, result.Tile.Name+".jpg")
+	f, err := os.Create(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("create file %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	if err := jpeg.Encode(f, result.Image, &jpeg.Options{Quality: quality}); err != nil {
+		return fmt.Errorf("encode JPEG: %w", err)
 	}
 
-	defer f.Close()
-
-	err = jpeg.Encode(f, tileResult.Image, &jpeg.Options{100})
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return f.Close()
 }
