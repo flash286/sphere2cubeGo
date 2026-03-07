@@ -7,6 +7,17 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -16,11 +27,10 @@ jobs:
           go-version: "1.22"
       - run: go build ./...
       - run: go test ./... -v
-      - run: go vet ./...
 
   build:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [lint, test]
     strategy:
       matrix:
         goos: [linux, darwin, windows]

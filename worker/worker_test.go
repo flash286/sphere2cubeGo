@@ -92,7 +92,7 @@ func TestRenderTile_OutputDimensions(t *testing.T) {
 
 	for _, face := range AllFaces() {
 		tile := Tile{Size: tileSize, Name: face}
-		result := RenderTile(pano, tile, ac)
+		result := RenderTile(pano, tile, &ac)
 
 		bounds := result.Image.Bounds()
 		if bounds.Dx() != tileSize || bounds.Dy() != tileSize {

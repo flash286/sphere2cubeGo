@@ -49,11 +49,6 @@ type Panorama struct {
 	Pix    []uint8 // len = Width * Height * 4
 }
 
-// pixOffset returns the byte offset for pixel at (x, y).
-func (p *Panorama) pixOffset(x, y int) int {
-	return (y*p.Width + x) * 4
-}
-
 // ValidateAspectRatio checks that the panorama has a 2:1 width-to-height ratio.
 func (p *Panorama) ValidateAspectRatio() error {
 	if p.Width == 0 || p.Height == 0 {
@@ -102,7 +97,7 @@ func NewPanorama(width, height int, pix []uint8) *Panorama {
 	return &Panorama{Width: width, Height: height, Pix: pix}
 }
 
-func updatePhi(halfSize float64, phi float64, majorDir, minorDir int, majorM, majorP, minorM, minorP float64) float64 {
+func updatePhi(halfSize, phi float64, majorDir, minorDir int, majorM, majorP, minorM, minorP float64) float64 {
 	switch {
 	case float64(majorDir) < halfSize:
 		return phi + majorM
@@ -132,7 +127,7 @@ func theta2Height(height int, theta float64) int {
 
 // RenderTile generates a cubemap face image from the source panorama.
 // Writes directly to the output image's Pix slice to avoid per-pixel allocations.
-func RenderTile(pano *Panorama, tile Tile, ac cache.AngleCache) TileResult {
+func RenderTile(pano *Panorama, tile Tile, ac *cache.AngleCache) TileResult {
 	size := tile.Size
 	tileImage := image.NewNRGBA(image.Rect(0, 0, size, size))
 	dst := tileImage.Pix

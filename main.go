@@ -60,7 +60,7 @@ func run() error {
 			defer wg.Done()
 			tile := worker.Tile{Size: *tileSize, Name: faceName}
 			log.Printf("Rendering tile %s", faceName)
-			results[idx] = worker.RenderTile(pano, tile, angleCache)
+			results[idx] = worker.RenderTile(pano, tile, &angleCache)
 			log.Printf("Tile %s done", faceName)
 		}(i, name)
 	}

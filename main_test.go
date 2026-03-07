@@ -68,7 +68,7 @@ func TestEndToEnd(t *testing.T) {
 
 	for _, name := range faces {
 		tile := worker.Tile{Size: tileSize, Name: name}
-		result := worker.RenderTile(pano, tile, ac)
+		result := worker.RenderTile(pano, tile, &ac)
 
 		if err := saver.SaveTile(result, outputDir, quality); err != nil {
 			t.Fatalf("SaveTile(%s): %v", name, err)
@@ -133,7 +133,7 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 
 	for _, name := range worker.AllFaces() {
 		tile := worker.Tile{Size: tileSize, Name: name}
-		result := worker.RenderTile(pano, tile, ac)
+		result := worker.RenderTile(pano, tile, &ac)
 
 		if err := saver.SaveTile(result, outputDir, 100); err != nil {
 			t.Fatalf("SaveTile(%s): %v", name, err)
@@ -188,7 +188,7 @@ func BenchmarkRenderTile(b *testing.B) {
 
 		b.Run(sizeLabel(tc.tile)+"_pano"+sizeLabel(tc.panoW), func(b *testing.B) {
 			for range b.N {
-				worker.RenderTile(pano, tile, ac)
+				worker.RenderTile(pano, tile, &ac)
 			}
 		})
 	}
@@ -217,7 +217,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 					go func(idx int, faceName string) {
 						defer wg.Done()
 						t := worker.Tile{Size: tc.tile, Name: faceName}
-						results[idx] = worker.RenderTile(pano, t, ac)
+						results[idx] = worker.RenderTile(pano, t, &ac)
 					}(i, name)
 				}
 				wg.Wait()
