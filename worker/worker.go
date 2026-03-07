@@ -129,6 +129,8 @@ func newRenderParams(pano *Panorama, tileImage *image.RGBA, size int, ac *cache.
 }
 
 // mapPixel converts spherical angles to panorama coordinates and copies the pixel.
+// Source pixels are stored as straight (non-premultiplied) alpha; output is
+// image.RGBA which uses premultiplied alpha, so we premultiply on copy.
 func (p *renderParams) mapPixel(dstOff int, theta, phi float64) {
 	x := p.halfWidth + p.invPiWidth*phi
 	w := float64(p.srcW)
@@ -139,7 +141,18 @@ func (p *renderParams) mapPixel(dstOff int, theta, phi float64) {
 	}
 
 	srcOff := (int(p.invPiHeight*theta)*p.srcW + int(x)) * 4
-	copy(p.dst[dstOff:dstOff+4], p.src[srcOff:srcOff+4])
+	a := uint16(p.src[srcOff+3])
+	switch a {
+	case 255:
+		copy(p.dst[dstOff:dstOff+4], p.src[srcOff:srcOff+4])
+	case 0:
+		// Fully transparent — leave dst as zero (already zeroed by NewRGBA).
+	default:
+		p.dst[dstOff] = uint8((uint16(p.src[srcOff])*a + 127) / 255)
+		p.dst[dstOff+1] = uint8((uint16(p.src[srcOff+1])*a + 127) / 255)
+		p.dst[dstOff+2] = uint8((uint16(p.src[srcOff+2])*a + 127) / 255)
+		p.dst[dstOff+3] = uint8(a)
+	}
 }
 
 func renderUp(p *renderParams) {
