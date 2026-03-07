@@ -47,8 +47,8 @@ func run() error {
 		return err
 	}
 
-	log.Printf("Pre-computing angle cache for tile size %d", *tileSize)
-	angleCache := cache.Precompute(*tileSize)
+	log.Printf("Pre-computing pixel map for tile size %d", *tileSize)
+	pixelMap := cache.Precompute(*tileSize, pano.Width, pano.Height)
 
 	faces := worker.AllFaces()
 	results := make([]worker.TileResult, len(faces))
@@ -60,15 +60,25 @@ func run() error {
 			defer wg.Done()
 			tile := worker.Tile{Size: *tileSize, Name: faceName}
 			log.Printf("Rendering tile %s", faceName)
-			results[idx] = worker.RenderTile(pano, tile, &angleCache)
+			results[idx] = worker.RenderTile(pano, tile, &pixelMap)
 			log.Printf("Tile %s done", faceName)
 		}(i, name)
 	}
 	wg.Wait()
 
-	for _, result := range results {
-		if err := saver.SaveTile(result, *outputDir, *quality); err != nil {
-			return fmt.Errorf("save tile %s: %w", result.Tile.Name, err)
+	saveErrs := make([]error, len(results))
+	var saveWg sync.WaitGroup
+	for i, result := range results {
+		saveWg.Add(1)
+		go func(idx int, r worker.TileResult) {
+			defer saveWg.Done()
+			saveErrs[idx] = saver.SaveTile(r, *outputDir, *quality)
+		}(i, result)
+	}
+	saveWg.Wait()
+	for i, err := range saveErrs {
+		if err != nil {
+			return fmt.Errorf("save tile %s: %w", results[i].Tile.Name, err)
 		}
 	}
 

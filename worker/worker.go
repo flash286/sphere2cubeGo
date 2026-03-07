@@ -6,8 +6,17 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
-	"math"
 	"sphere2cubeGo/cache"
+)
+
+// Face indices matching cache.PixelMap.Maps order.
+const (
+	faceIdxUp    = 0
+	faceIdxDown  = 1
+	faceIdxFront = 2
+	faceIdxRight = 3
+	faceIdxBack  = 4
+	faceIdxLeft  = 5
 )
 
 // Face names for cubemap tiles.
@@ -25,20 +34,25 @@ func AllFaces() []string {
 	return []string{FaceUp, FaceDown, FaceFront, FaceRight, FaceBack, FaceLeft}
 }
 
+var faceIndex = map[string]int{
+	FaceUp:    faceIdxUp,
+	FaceDown:  faceIdxDown,
+	FaceFront: faceIdxFront,
+	FaceRight: faceIdxRight,
+	FaceBack:  faceIdxBack,
+	FaceLeft:  faceIdxLeft,
+}
+
 // Tile describes a single cubemap face to generate.
 type Tile struct {
 	Size int
 	Name string
 }
 
-func (t *Tile) halfSize() float64 {
-	return float64(t.Size-1) / 2
-}
-
 // TileResult holds the generated image for a cubemap face.
 type TileResult struct {
 	Tile  Tile
-	Image *image.NRGBA
+	Image *image.RGBA
 }
 
 // Panorama stores equirectangular image pixels as a flat NRGBA byte slice.
@@ -97,87 +111,31 @@ func NewPanorama(width, height int, pix []uint8) *Panorama {
 	return &Panorama{Width: width, Height: height, Pix: pix}
 }
 
-func updatePhi(halfSize, phi float64, majorDir, minorDir int, majorM, majorP, minorM, minorP float64) float64 {
-	switch {
-	case float64(majorDir) < halfSize:
-		return phi + majorM
-	case float64(majorDir) > halfSize:
-		return phi + majorP
-	case float64(minorDir) < halfSize:
-		return minorM
-	default:
-		return minorP
-	}
-}
-
-func phi2Width(width int, phi float64) int {
-	x := 0.5 * float64(width) * (phi/math.Pi + 1)
-	w := float64(width)
-	if x < 1 {
-		x += w
-	} else if x > w {
-		x -= w
-	}
-	return int(x)
-}
-
-func theta2Height(height int, theta float64) int {
-	return int(float64(height) * theta / math.Pi)
-}
-
 // RenderTile generates a cubemap face image from the source panorama.
-// Writes directly to the output image's Pix slice to avoid per-pixel allocations.
-func RenderTile(pano *Panorama, tile Tile, ac *cache.AngleCache) TileResult {
+// Uses pre-computed pixel offset map for zero float math in the hot loop.
+func RenderTile(pano *Panorama, tile Tile, pm *cache.PixelMap) TileResult {
 	size := tile.Size
-	tileImage := image.NewNRGBA(image.Rect(0, 0, size, size))
+	tileImage := image.NewRGBA(image.Rect(0, 0, size, size))
 	dst := tileImage.Pix
 	src := pano.Pix
-	srcW := pano.Width
-	srcH := pano.Height
-	half := tile.halfSize()
+	offsets := pm.Maps[faceIndex[tile.Name]]
 
-	for tileY := range size {
-		dstRowOff := tileY * size * 4
-
-		for tileX := range size {
-			var theta, phi float64
-
-			switch tile.Name {
-			case FaceUp:
-				theta = ac.ZenithPos[ac.At(tileX, tileY)]
-				phi = ac.Azimuth[ac.At(tileY, tileX)]
-				phi = updatePhi(half, phi, tileY, tileX, math.Pi, 0, -math.Pi/2, math.Pi/2)
-			case FaceDown:
-				theta = ac.ZenithNeg[ac.At(tileX, tileY)]
-				phi = ac.Azimuth[ac.At(size-tileY-1, tileX)]
-				phi = updatePhi(half, phi, tileY, tileX, 0, math.Pi, -math.Pi/2, math.Pi/2)
-			case FaceFront:
-				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
-				phi = ac.Azimuth[ac.At(size-1, tileX)]
-				phi = updatePhi(half, phi, tileY, tileX, 0, 0, -math.Pi/2, math.Pi/2)
-			case FaceRight:
-				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
-				phi = ac.Azimuth[ac.At(size-tileX-1, size-1)]
-				phi = updatePhi(half, phi, tileX, tileY, 0, math.Pi, math.Pi/2, math.Pi/2)
-			case FaceBack:
-				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
-				phi = ac.Azimuth[ac.At(size-1, tileX)] + math.Pi
-			case FaceLeft:
-				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
-				phi = ac.Azimuth[ac.At(size-tileX-1, size-1)]
-				phi = updatePhi(half, phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
-			}
-
-			spX := phi2Width(srcW, phi)
-			spY := theta2Height(srcH, theta)
-
-			srcOff := (spY*srcW + spX) * 4
-			dstOff := dstRowOff + tileX*4
-
-			dst[dstOff] = src[srcOff]
-			dst[dstOff+1] = src[srcOff+1]
-			dst[dstOff+2] = src[srcOff+2]
-			dst[dstOff+3] = src[srcOff+3]
+	n := size * size
+	for i := range n {
+		srcOff := int(offsets[i])
+		dstOff := i * 4
+		a := src[srcOff+3]
+		switch a {
+		case 255:
+			copy(dst[dstOff:dstOff+4], src[srcOff:srcOff+4])
+		case 0:
+			// Fully transparent — leave dst as zero (already zeroed by NewRGBA).
+		default:
+			a16 := uint16(a)
+			dst[dstOff] = uint8((uint16(src[srcOff])*a16 + 127) / 255)
+			dst[dstOff+1] = uint8((uint16(src[srcOff+1])*a16 + 127) / 255)
+			dst[dstOff+2] = uint8((uint16(src[srcOff+2])*a16 + 127) / 255)
+			dst[dstOff+3] = a
 		}
 	}
 
