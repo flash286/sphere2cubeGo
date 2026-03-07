@@ -3,7 +3,6 @@ package worker
 import (
 	"fmt"
 	"image"
-	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
@@ -39,60 +38,68 @@ func (t *Tile) halfSize() float64 {
 // TileResult holds the generated image for a cubemap face.
 type TileResult struct {
 	Tile  Tile
-	Image image.Image
+	Image *image.NRGBA
 }
 
-// Pixel holds 8-bit RGBA color values.
-type Pixel struct {
-	R, G, B, A int
+// Panorama stores equirectangular image pixels as a flat NRGBA byte slice.
+// 4 bytes per pixel (R, G, B, A), row-major order.
+type Panorama struct {
+	Width  int
+	Height int
+	Pix    []uint8 // len = Width * Height * 4
 }
 
-func (p *Pixel) toColor() color.Color {
-	return color.RGBA64{
-		uint16(p.R * 257),
-		uint16(p.G * 257),
-		uint16(p.B * 257),
-		uint16(p.A * 257),
+// pixOffset returns the byte offset for pixel at (x, y).
+func (p *Panorama) pixOffset(x, y int) int {
+	return (y*p.Width + x) * 4
+}
+
+// ValidateAspectRatio checks that the panorama has a 2:1 width-to-height ratio.
+func (p *Panorama) ValidateAspectRatio() error {
+	if p.Width == 0 || p.Height == 0 {
+		return fmt.Errorf("empty image")
 	}
+	if p.Width/p.Height != 2 {
+		return fmt.Errorf("panorama must have 2:1 aspect ratio, got %d:%d", p.Width, p.Height)
+	}
+	return nil
 }
 
-func rgbaToPixel(r, g, b, a uint32) Pixel {
-	return Pixel{int(r / 257), int(g / 257), int(b / 257), int(a / 257)}
-}
-
-// DecodePixels reads an image (JPEG or PNG) and returns a 2D pixel array.
-func DecodePixels(r io.Reader) ([][]Pixel, error) {
+// DecodeImage reads an image (JPEG or PNG) and returns a Panorama with flat pixel data.
+func DecodeImage(r io.Reader) (*Panorama, error) {
 	img, _, err := image.Decode(r)
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
 
 	bounds := img.Bounds()
-	width, height := bounds.Max.X, bounds.Max.Y
+	w, h := bounds.Dx(), bounds.Dy()
 
-	pixels := make([][]Pixel, height)
-	for y := range height {
-		row := make([]Pixel, width)
-		for x := range width {
-			row[x] = rgbaToPixel(img.At(x, y).RGBA())
-		}
-		pixels[y] = row
+	// Fast path: if already NRGBA, just take the Pix slice directly.
+	if nrgba, ok := img.(*image.NRGBA); ok && nrgba.Stride == w*4 {
+		return &Panorama{Width: w, Height: h, Pix: nrgba.Pix}, nil
 	}
 
-	return pixels, nil
+	pix := make([]uint8, w*h*4)
+	i := 0
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			pix[i] = uint8(r >> 8)
+			pix[i+1] = uint8(g >> 8)
+			pix[i+2] = uint8(b >> 8)
+			pix[i+3] = uint8(a >> 8)
+			i += 4
+		}
+	}
+
+	return &Panorama{Width: w, Height: h, Pix: pix}, nil
 }
 
-// ValidateAspectRatio checks that the panorama has a 2:1 width-to-height ratio.
-func ValidateAspectRatio(pixels [][]Pixel) error {
-	if len(pixels) == 0 || len(pixels[0]) == 0 {
-		return fmt.Errorf("empty image")
-	}
-	height := len(pixels)
-	width := len(pixels[0])
-	if width/height != 2 {
-		return fmt.Errorf("panorama must have 2:1 aspect ratio, got %d:%d", width, height)
-	}
-	return nil
+// NewPanorama creates a Panorama from raw NRGBA pixel data.
+// Useful for testing without JPEG encode/decode overhead.
+func NewPanorama(width, height int, pix []uint8) *Panorama {
+	return &Panorama{Width: width, Height: height, Pix: pix}
 }
 
 func updatePhi(halfSize float64, phi float64, majorDir, minorDir int, majorM, majorP, minorM, minorP float64) float64 {
@@ -110,11 +117,11 @@ func updatePhi(halfSize float64, phi float64, majorDir, minorDir int, majorM, ma
 
 func phi2Width(width int, phi float64) int {
 	x := 0.5 * float64(width) * (phi/math.Pi + 1)
-	switch {
-	case x < 1:
-		x += float64(width)
-	case x > float64(width):
-		x -= float64(width)
+	w := float64(width)
+	if x < 1 {
+		x += w
+	} else if x > w {
+		x -= w
 	}
 	return int(x)
 }
@@ -123,52 +130,59 @@ func theta2Height(height int, theta float64) int {
 	return int(float64(height) * theta / math.Pi)
 }
 
-func mapPixel(tileX, tileY int, pixels [][]Pixel, tile Tile, ac cache.AngleCache) Pixel {
-	var theta, phi float64
+// RenderTile generates a cubemap face image from the source panorama.
+// Writes directly to the output image's Pix slice to avoid per-pixel allocations.
+func RenderTile(pano *Panorama, tile Tile, ac cache.AngleCache) TileResult {
+	size := tile.Size
+	tileImage := image.NewNRGBA(image.Rect(0, 0, size, size))
+	dst := tileImage.Pix
+	src := pano.Pix
+	srcW := pano.Width
+	srcH := pano.Height
+	half := tile.halfSize()
 
-	sphereHeight := len(pixels)
-	sphereWidth := len(pixels[0])
+	for tileY := range size {
+		dstRowOff := tileY * size * 4
 
-	switch tile.Name {
-	case FaceUp:
-		theta = ac.ZenithPos[tileY][tileX]
-		phi = ac.Azimuth[tileX][tileY]
-		phi = updatePhi(tile.halfSize(), phi, tileY, tileX, math.Pi, 0, -math.Pi/2, math.Pi/2)
-	case FaceDown:
-		theta = ac.ZenithNeg[tileY][tileX]
-		phi = ac.Azimuth[tileX][tile.Size-tileY-1]
-		phi = updatePhi(tile.halfSize(), phi, tileY, tileX, 0, math.Pi, -math.Pi/2, math.Pi/2)
-	case FaceFront:
-		theta = ac.Polar[tile.Size-tileY-1][tile.Size-tileX-1]
-		phi = ac.Azimuth[tileX][tile.Size-1]
-		phi = updatePhi(tile.halfSize(), phi, tileY, tileX, 0, 0, -math.Pi/2, math.Pi/2)
-	case FaceRight:
-		theta = ac.Polar[tile.Size-tileY-1][tile.Size-tileX-1]
-		phi = ac.Azimuth[tile.Size-1][tile.Size-tileX-1]
-		phi = updatePhi(tile.halfSize(), phi, tileX, tileY, 0, math.Pi, math.Pi/2, math.Pi/2)
-	case FaceBack:
-		theta = ac.Polar[tile.Size-tileY-1][tile.Size-tileX-1]
-		phi = ac.Azimuth[tileX][tile.Size-1] + math.Pi
-	case FaceLeft:
-		theta = ac.Polar[tile.Size-tileY-1][tile.Size-tileX-1]
-		phi = ac.Azimuth[tile.Size-1][tile.Size-tileX-1]
-		phi = updatePhi(tile.halfSize(), phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
-	}
+		for tileX := range size {
+			var theta, phi float64
 
-	spX := phi2Width(sphereWidth, phi)
-	spY := theta2Height(sphereHeight, theta)
+			switch tile.Name {
+			case FaceUp:
+				theta = ac.ZenithPos[ac.At(tileX, tileY)]
+				phi = ac.Azimuth[ac.At(tileY, tileX)]
+				phi = updatePhi(half, phi, tileY, tileX, math.Pi, 0, -math.Pi/2, math.Pi/2)
+			case FaceDown:
+				theta = ac.ZenithNeg[ac.At(tileX, tileY)]
+				phi = ac.Azimuth[ac.At(size-tileY-1, tileX)]
+				phi = updatePhi(half, phi, tileY, tileX, 0, math.Pi, -math.Pi/2, math.Pi/2)
+			case FaceFront:
+				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
+				phi = ac.Azimuth[ac.At(size-1, tileX)]
+				phi = updatePhi(half, phi, tileY, tileX, 0, 0, -math.Pi/2, math.Pi/2)
+			case FaceRight:
+				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
+				phi = ac.Azimuth[ac.At(size-tileX-1, size-1)]
+				phi = updatePhi(half, phi, tileX, tileY, 0, math.Pi, math.Pi/2, math.Pi/2)
+			case FaceBack:
+				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
+				phi = ac.Azimuth[ac.At(size-1, tileX)] + math.Pi
+			case FaceLeft:
+				theta = ac.Polar[ac.At(size-tileX-1, size-tileY-1)]
+				phi = ac.Azimuth[ac.At(size-tileX-1, size-1)]
+				phi = updatePhi(half, phi, tileX, tileY, math.Pi, 0, -math.Pi/2, -math.Pi/2)
+			}
 
-	return pixels[spY][spX]
-}
+			spX := phi2Width(srcW, phi)
+			spY := theta2Height(srcH, theta)
 
-// RenderTile generates a cubemap face image from the source panorama pixels.
-func RenderTile(pixels [][]Pixel, tile Tile, ac cache.AngleCache) TileResult {
-	tileImage := image.NewRGBA(image.Rect(0, 0, tile.Size, tile.Size))
+			srcOff := (spY*srcW + spX) * 4
+			dstOff := dstRowOff + tileX*4
 
-	for tileY := range tile.Size {
-		for tileX := range tile.Size {
-			px := mapPixel(tileX, tileY, pixels, tile, ac)
-			tileImage.Set(tileX, tileY, px.toColor())
+			dst[dstOff] = src[srcOff]
+			dst[dstOff+1] = src[srcOff+1]
+			dst[dstOff+2] = src[srcOff+2]
+			dst[dstOff+3] = src[srcOff+3]
 		}
 	}
 

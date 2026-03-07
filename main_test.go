@@ -43,43 +43,38 @@ func createTestPanorama(t *testing.T, width, height int) string {
 }
 
 func TestEndToEnd(t *testing.T) {
-	// 1. Create a synthetic 200x100 panorama (2:1)
 	panoramaPath := createTestPanorama(t, 200, 100)
 	outputDir := filepath.Join(t.TempDir(), "output")
 	tileSize := 64
 	quality := 90
 
-	// 2. Decode input
 	f, err := os.Open(panoramaPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	pixels, err := worker.DecodePixels(f)
+	pano, err := worker.DecodeImage(f)
 	if err != nil {
-		t.Fatalf("DecodePixels: %v", err)
+		t.Fatalf("DecodeImage: %v", err)
 	}
 
-	if err := worker.ValidateAspectRatio(pixels); err != nil {
+	if err := pano.ValidateAspectRatio(); err != nil {
 		t.Fatalf("ValidateAspectRatio: %v", err)
 	}
 
-	// 3. Pre-compute cache and render all 6 faces
 	ac := cache.Precompute(tileSize)
 	faces := worker.AllFaces()
 
 	for _, name := range faces {
 		tile := worker.Tile{Size: tileSize, Name: name}
-		result := worker.RenderTile(pixels, tile, ac)
+		result := worker.RenderTile(pano, tile, ac)
 
-		// 4. Save each tile
 		if err := saver.SaveTile(result, outputDir, quality); err != nil {
 			t.Fatalf("SaveTile(%s): %v", name, err)
 		}
 	}
 
-	// 5. Verify all 6 output files exist and are valid JPEGs
 	for _, name := range faces {
 		path := filepath.Join(outputDir, name+".jpg")
 
@@ -129,7 +124,7 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 	}
 	defer f.Close()
 
-	pixels, err := worker.DecodePixels(f)
+	pano, err := worker.DecodeImage(f)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,14 +133,13 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 
 	for _, name := range worker.AllFaces() {
 		tile := worker.Tile{Size: tileSize, Name: name}
-		result := worker.RenderTile(pixels, tile, ac)
+		result := worker.RenderTile(pano, tile, ac)
 
 		if err := saver.SaveTile(result, outputDir, 100); err != nil {
 			t.Fatalf("SaveTile(%s): %v", name, err)
 		}
 	}
 
-	// Verify all files exist
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
 		t.Fatal(err)
@@ -155,23 +149,20 @@ func TestEndToEnd_LargerTile(t *testing.T) {
 	}
 }
 
-// createGradientPixels builds an in-memory 2:1 panorama pixel array directly,
+// createGradientPanorama builds an in-memory 2:1 panorama directly,
 // bypassing JPEG encode/decode to keep benchmark setup overhead minimal.
-func createGradientPixels(width, height int) [][]worker.Pixel {
-	pixels := make([][]worker.Pixel, height)
+func createGradientPanorama(width, height int) *worker.Panorama {
+	pix := make([]uint8, width*height*4)
 	for y := range height {
-		row := make([]worker.Pixel, width)
 		for x := range width {
-			row[x] = worker.Pixel{
-				R: 255 * x / width,
-				G: 255 * y / height,
-				B: 128,
-				A: 255,
-			}
+			off := (y*width + x) * 4
+			pix[off] = uint8(255 * x / width)
+			pix[off+1] = uint8(255 * y / height)
+			pix[off+2] = 128
+			pix[off+3] = 255
 		}
-		pixels[y] = row
 	}
-	return pixels
+	return worker.NewPanorama(width, height, pix)
 }
 
 // BenchmarkPrecompute measures angle cache generation time.
@@ -191,13 +182,13 @@ func BenchmarkRenderTile(b *testing.B) {
 		{2048, 1024, 512},
 		{4096, 2048, 1024},
 	} {
-		pixels := createGradientPixels(tc.panoW, tc.panoH)
+		pano := createGradientPanorama(tc.panoW, tc.panoH)
 		ac := cache.Precompute(tc.tile)
 		tile := worker.Tile{Size: tc.tile, Name: worker.FaceFront}
 
 		b.Run(sizeLabel(tc.tile)+"_pano"+sizeLabel(tc.panoW), func(b *testing.B) {
 			for range b.N {
-				worker.RenderTile(pixels, tile, ac)
+				worker.RenderTile(pano, tile, ac)
 			}
 		})
 	}
@@ -210,7 +201,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 		{4096, 2048, 512},
 		{4096, 2048, 1024},
 	} {
-		pixels := createGradientPixels(tc.panoW, tc.panoH)
+		pano := createGradientPanorama(tc.panoW, tc.panoH)
 
 		label := "pano" + sizeLabel(tc.panoW) + "_tile" + sizeLabel(tc.tile)
 		b.Run(label, func(b *testing.B) {
@@ -226,7 +217,7 @@ func BenchmarkFullPipeline(b *testing.B) {
 					go func(idx int, faceName string) {
 						defer wg.Done()
 						t := worker.Tile{Size: tc.tile, Name: faceName}
-						results[idx] = worker.RenderTile(pixels, t, ac)
+						results[idx] = worker.RenderTile(pano, t, ac)
 					}(i, name)
 				}
 				wg.Wait()

@@ -38,12 +38,12 @@ func run() error {
 	start := time.Now()
 
 	log.Printf("Decoding %s", *inputPath)
-	pixels, err := worker.DecodePixels(f)
+	pano, err := worker.DecodeImage(f)
 	if err != nil {
 		return fmt.Errorf("decode input: %w", err)
 	}
 
-	if err := worker.ValidateAspectRatio(pixels); err != nil {
+	if err := pano.ValidateAspectRatio(); err != nil {
 		return err
 	}
 
@@ -60,7 +60,7 @@ func run() error {
 			defer wg.Done()
 			tile := worker.Tile{Size: *tileSize, Name: faceName}
 			log.Printf("Rendering tile %s", faceName)
-			results[idx] = worker.RenderTile(pixels, tile, angleCache)
+			results[idx] = worker.RenderTile(pano, tile, angleCache)
 			log.Printf("Tile %s done", faceName)
 		}(i, name)
 	}

@@ -10,8 +10,21 @@ import (
 	"sphere2cubeGo/cache"
 )
 
-func TestDecodePixels_JPEG(t *testing.T) {
-	// Create a small 4x2 test image (2:1 ratio)
+func makeTestPanorama(width, height int) *Panorama {
+	pix := make([]uint8, width*height*4)
+	for y := range height {
+		for x := range width {
+			off := (y*width + x) * 4
+			pix[off] = uint8(255 * x / width)
+			pix[off+1] = uint8(255 * y / height)
+			pix[off+2] = 128
+			pix[off+3] = 255
+		}
+	}
+	return NewPanorama(width, height, pix)
+}
+
+func TestDecodeImage_JPEG(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
 	img.Set(0, 0, color.RGBA{255, 0, 0, 255})
 	img.Set(3, 1, color.RGBA{0, 0, 255, 255})
@@ -21,22 +34,22 @@ func TestDecodePixels_JPEG(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pixels, err := DecodePixels(&buf)
+	pano, err := DecodeImage(&buf)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(pixels) != 2 {
-		t.Errorf("expected 2 rows, got %d", len(pixels))
+	if pano.Width != 4 || pano.Height != 2 {
+		t.Errorf("expected 4x2, got %dx%d", pano.Width, pano.Height)
 	}
-	if len(pixels[0]) != 4 {
-		t.Errorf("expected 4 cols, got %d", len(pixels[0]))
+	if len(pano.Pix) != 4*2*4 {
+		t.Errorf("expected %d bytes, got %d", 4*2*4, len(pano.Pix))
 	}
 }
 
-func TestDecodePixels_Invalid(t *testing.T) {
+func TestDecodeImage_Invalid(t *testing.T) {
 	buf := bytes.NewBufferString("not an image")
-	_, err := DecodePixels(buf)
+	_, err := DecodeImage(buf)
 	if err == nil {
 		t.Error("expected error for invalid input")
 	}
@@ -56,11 +69,8 @@ func TestValidateAspectRatio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pixels := make([][]Pixel, tt.h)
-			for y := range tt.h {
-				pixels[y] = make([]Pixel, tt.w)
-			}
-			err := ValidateAspectRatio(pixels)
+			pano := makeTestPanorama(tt.w, tt.h)
+			err := pano.ValidateAspectRatio()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidateAspectRatio(%dx%d) error = %v, wantErr %v", tt.w, tt.h, err, tt.wantErr)
 			}
@@ -69,32 +79,20 @@ func TestValidateAspectRatio(t *testing.T) {
 }
 
 func TestValidateAspectRatio_Empty(t *testing.T) {
-	err := ValidateAspectRatio(nil)
-	if err == nil {
-		t.Error("expected error for nil pixels")
-	}
-	err = ValidateAspectRatio([][]Pixel{})
-	if err == nil {
-		t.Error("expected error for empty pixels")
+	pano := &Panorama{}
+	if err := pano.ValidateAspectRatio(); err == nil {
+		t.Error("expected error for empty panorama")
 	}
 }
 
 func TestRenderTile_OutputDimensions(t *testing.T) {
-	// Create a minimal 4x2 panorama
-	pixels := make([][]Pixel, 2)
-	for y := range 2 {
-		pixels[y] = make([]Pixel, 4)
-		for x := range 4 {
-			pixels[y][x] = Pixel{128, 128, 128, 255}
-		}
-	}
-
+	pano := makeTestPanorama(4, 2)
 	tileSize := 2
 	ac := cache.Precompute(tileSize)
 
 	for _, face := range AllFaces() {
 		tile := Tile{Size: tileSize, Name: face}
-		result := RenderTile(pixels, tile, ac)
+		result := RenderTile(pano, tile, ac)
 
 		bounds := result.Image.Bounds()
 		if bounds.Dx() != tileSize || bounds.Dy() != tileSize {
@@ -118,15 +116,4 @@ func TestAllFaces(t *testing.T) {
 			t.Errorf("unexpected face: %s", f)
 		}
 	}
-}
-
-func TestPixelToColor(t *testing.T) {
-	p := Pixel{255, 128, 0, 255}
-	c := p.toColor()
-	r, g, b, a := c.RGBA()
-	// Values are scaled by 257
-	if r != 65535 || b != 0 || a != 65535 {
-		t.Errorf("unexpected RGBA: %d, %d, %d, %d", r, g, b, a)
-	}
-	_ = g // 128*257 = 32896
 }
