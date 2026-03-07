@@ -34,7 +34,7 @@ type Tile struct {
 // TileResult holds the generated image for a cubemap face.
 type TileResult struct {
 	Tile  Tile
-	Image *image.NRGBA
+	Image *image.RGBA
 }
 
 // Panorama stores equirectangular image pixels as a flat NRGBA byte slice.
@@ -111,7 +111,7 @@ type renderParams struct {
 	invPiHeight float64
 }
 
-func newRenderParams(pano *Panorama, tileImage *image.NRGBA, size int, ac *cache.AngleCache) renderParams {
+func newRenderParams(pano *Panorama, tileImage *image.RGBA, size int, ac *cache.AngleCache) renderParams {
 	return renderParams{
 		dst:         tileImage.Pix,
 		src:         pano.Pix,
@@ -305,7 +305,7 @@ func renderLeft(p *renderParams) {
 // Dispatches to face-specific render functions to avoid per-pixel branching.
 func RenderTile(pano *Panorama, tile Tile, ac *cache.AngleCache) TileResult {
 	size := tile.Size
-	tileImage := image.NewNRGBA(image.Rect(0, 0, size, size))
+	tileImage := image.NewRGBA(image.Rect(0, 0, size, size))
 	p := newRenderParams(pano, tileImage, size, ac)
 
 	switch tile.Name {

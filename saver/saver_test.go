@@ -13,7 +13,7 @@ import (
 func TestSaveTile(t *testing.T) {
 	dir := t.TempDir()
 
-	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
 	img.Set(0, 0, color.RGBA{255, 0, 0, 255})
 
 	result := worker.TileResult{
@@ -38,7 +38,7 @@ func TestSaveTile(t *testing.T) {
 func TestSaveTile_CreatesSubdirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "output")
 
-	img := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	result := worker.TileResult{
 		Tile:  worker.Tile{Size: 2, Name: "up"},
 		Image: img,
