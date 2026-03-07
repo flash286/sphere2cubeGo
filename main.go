@@ -66,9 +66,19 @@ func run() error {
 	}
 	wg.Wait()
 
-	for _, result := range results {
-		if err := saver.SaveTile(result, *outputDir, *quality); err != nil {
-			return fmt.Errorf("save tile %s: %w", result.Tile.Name, err)
+	saveErrs := make([]error, len(results))
+	var saveWg sync.WaitGroup
+	for i, result := range results {
+		saveWg.Add(1)
+		go func(idx int, r worker.TileResult) {
+			defer saveWg.Done()
+			saveErrs[idx] = saver.SaveTile(r, *outputDir, *quality)
+		}(i, result)
+	}
+	saveWg.Wait()
+	for i, err := range saveErrs {
+		if err != nil {
+			return fmt.Errorf("save tile %s: %w", results[i].Tile.Name, err)
 		}
 	}
 

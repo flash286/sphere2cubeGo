@@ -1,6 +1,10 @@
 package cache
 
-import "math"
+import (
+	"math"
+	"runtime"
+	"sync"
+)
 
 // AngleCache stores pre-computed trigonometric values for cube-to-sphere coordinate mapping
 // in flat arrays for optimal CPU cache locality. Index with [y*Size + x].
@@ -19,6 +23,7 @@ func (c *AngleCache) At(x, y int) int {
 
 // Precompute builds lookup tables for all trigonometric values needed
 // to map tile pixel coordinates to spherical coordinates.
+// Parallelized across available CPU cores by splitting rows.
 func Precompute(tileSize int) AngleCache {
 	n := tileSize * tileSize
 	halfSize := float64(tileSize-1) / 2
@@ -31,22 +36,46 @@ func Precompute(tileSize int) AngleCache {
 		Azimuth:   make([]float64, n),
 	}
 
-	for tileY := range tileSize {
-		y := float64(tileY)/halfSize - 1
-		rowOff := tileY * tileSize
-
-		for tileX := range tileSize {
-			x := float64(tileX)/halfSize - 1
-			root := math.Sqrt(x*x + y*y + 1)
-			i := rowOff + tileX
-			c.ZenithPos[i] = math.Acos(1 / root)
-			c.ZenithNeg[i] = math.Acos(-1 / root)
-			c.Polar[i] = math.Acos(y / root)
-			if x != 0 {
-				c.Azimuth[i] = math.Atan(y / x)
-			}
-		}
+	workers := runtime.GOMAXPROCS(0)
+	if workers > tileSize {
+		workers = tileSize
 	}
 
+	var wg sync.WaitGroup
+	rowsPerWorker := (tileSize + workers - 1) / workers
+
+	for w := range workers {
+		startY := w * rowsPerWorker
+		endY := startY + rowsPerWorker
+		if endY > tileSize {
+			endY = tileSize
+		}
+		if startY >= endY {
+			break
+		}
+
+		wg.Add(1)
+		go func(sy, ey int) {
+			defer wg.Done()
+			for tileY := sy; tileY < ey; tileY++ {
+				y := float64(tileY)/halfSize - 1
+				rowOff := tileY * tileSize
+
+				for tileX := range tileSize {
+					x := float64(tileX)/halfSize - 1
+					root := math.Sqrt(x*x + y*y + 1)
+					i := rowOff + tileX
+					c.ZenithPos[i] = math.Acos(1 / root)
+					c.ZenithNeg[i] = math.Acos(-1 / root)
+					c.Polar[i] = math.Acos(y / root)
+					if x != 0 {
+						c.Azimuth[i] = math.Atan(y / x)
+					}
+				}
+			}
+		}(startY, endY)
+	}
+
+	wg.Wait()
 	return c
 }
