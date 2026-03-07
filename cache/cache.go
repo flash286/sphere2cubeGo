@@ -1,44 +1,47 @@
 package cache
 
-import (
-	"math"
-)
+import "math"
 
-type CacheAngles struct {
-	ZP   [][]float64
-	ZM   [][]float64
-	XYPM [][]float64
-	PHI  [][]float64
+// AngleCache stores pre-computed trigonometric values for cube-to-sphere coordinate mapping.
+// Pre-computing these avoids redundant math operations during per-pixel processing.
+type AngleCache struct {
+	ZenithPos  [][]float64 // acos(1/r) — zenith angle for upward-facing tile
+	ZenithNeg  [][]float64 // acos(-1/r) — zenith angle for downward-facing tile
+	Polar      [][]float64 // acos(y/r) — polar angle for side tiles
+	Azimuth    [][]float64 // atan(y/x) — azimuth angle
 }
 
-func CacheAnglesHandler(tileSize int) CacheAngles {
-	var cache CacheAngles
+// Precompute builds lookup tables for all trigonometric values needed
+// to map tile pixel coordinates to spherical coordinates.
+func Precompute(tileSize int) AngleCache {
 	halfSize := float64(tileSize-1) / 2
 
-	cache.ZP = make([][]float64, tileSize)
-	cache.ZM = make([][]float64, tileSize)
-	cache.XYPM = make([][]float64, tileSize)
-	cache.PHI = make([][]float64, tileSize)
+	c := AngleCache{
+		ZenithPos: make([][]float64, tileSize),
+		ZenithNeg: make([][]float64, tileSize),
+		Polar:     make([][]float64, tileSize),
+		Azimuth:   make([][]float64, tileSize),
+	}
 
-	for tileY := 0; tileY < tileSize; tileY++ {
+	for tileY := range tileSize {
 		y := float64(tileY)/halfSize - 1
 
-		cache.ZP[tileY] = make([]float64, tileSize)
-		cache.ZM[tileY] = make([]float64, tileSize)
-		cache.XYPM[tileY] = make([]float64, tileSize)
-		cache.PHI[tileY] = make([]float64, tileSize)
+		c.ZenithPos[tileY] = make([]float64, tileSize)
+		c.ZenithNeg[tileY] = make([]float64, tileSize)
+		c.Polar[tileY] = make([]float64, tileSize)
+		c.Azimuth[tileY] = make([]float64, tileSize)
 
-		for tileX := 0; tileX < tileSize; tileX++ {
+		for tileX := range tileSize {
 			x := float64(tileX)/halfSize - 1
-			root := math.Sqrt(math.Pow(x, 2) + math.Pow(y, 2) + 1)
-			cache.ZP[tileY][tileX] = math.Acos(1 / root)
-			cache.ZM[tileY][tileX] = math.Acos(-1 / root)
-			cache.XYPM[tileY][tileX] = math.Acos(y / root)
+			root := math.Sqrt(x*x + y*y + 1)
+			c.ZenithPos[tileY][tileX] = math.Acos(1 / root)
+			c.ZenithNeg[tileY][tileX] = math.Acos(-1 / root)
+			c.Polar[tileY][tileX] = math.Acos(y / root)
 			if x != 0 {
-				cache.PHI[tileY][tileX] = math.Atan(y / x)
+				c.Azimuth[tileY][tileX] = math.Atan(y / x)
 			}
 		}
 	}
 
-	return cache
+	return c
 }
